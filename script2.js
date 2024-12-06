@@ -1,103 +1,100 @@
-const SERVER_URL = "http://twserver.alunos.dcc.fc.up.pt:8008/";
+const SERVER_URL = "ws://localhost:8008/"; // WebSocket server running locally
 
-async function register(nick, password) {
-    const url = `${SERVER_URL}register`;
-    const data = { nick, password };
+let socket = null;
 
-    return await sendPostRequest(url, data);
+// Initialize WebSocket connection
+function initWebSocket() {
+    socket = new WebSocket(SERVER_URL);
+
+    socket.onopen = function () {
+        console.log("Connected to WebSocket server.");
+    };
+
+    socket.onmessage = function (event) {
+        const data = JSON.parse(event.data);
+        handleServerResponse(data);
+    };
+
+    socket.onclose = function () {
+        console.log("Disconnected from WebSocket server.");
+    };
+
+    socket.onerror = function (error) {
+        console.error("WebSocket error:", error);
+    };
 }
 
-async function sendPostRequest(url, data) {
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-
-        if (!response.ok) {
-            throw new Error(`Erro: ${response.status} - ${response.statusText}`);
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error("Erro ao enviar requisição POST:", error);
-        return { error: "Erro de conexão com o servidor." };
+// Send a message through WebSocket
+function sendMessage(message) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(message));
+    } else {
+        console.error("WebSocket is not connected.");
     }
 }
 
+// Handle responses from the server
+function handleServerResponse(data) {
+    // Implement specific handling based on server messages
+    console.log("Received data from server:", data);
+}
 
+// Functions for game logic
+function register(nick, password) {
+    const message = {
+        type: "register",
+        nick: nick,
+        password: password
+    };
+    sendMessage(message);
+}
 
-async function join(group, nick, password, size) {
-    if (!group || !nick || !password || !size) {
-        throw new Error("Group, nickname, password, and size are required to join a game.");
-    }
-
-    const url = `${SERVER_URL}join`;
-    const data = {
+function join(group, nick, password, size) {
+    const message = {
+        type: "join",
         group: group,
         nick: nick,
         password: password,
         size: size
     };
-
-    return await sendPostRequest(url, data);
+    sendMessage(message);
 }
 
-async function leave(nick, password, game) {
-    if (!nick || !password || !game) {
-        throw new Error("Nickname, password, and game ID are required to leave a game.");
-    }
-
-    const url = `${SERVER_URL}leave`;
-    const data = {
+function leave(nick, password, game) {
+    const message = {
+        type: "leave",
         nick: nick,
         password: password,
         game: game
     };
-
-    return await sendPostRequest(url, data);
+    sendMessage(message);
 }
 
-async function notify(nick, password, game, move) {
-    if (!nick || !password || !game || !move) {
-        throw new Error("Nickname, password, game ID, and move data are required to notify a move.");
-    }
-
-    const url = `${SERVER_URL}notify`;
-    const data = {
+function notify(nick, password, game, move) {
+    const message = {
+        type: "notify",
         nick: nick,
         password: password,
         game: game,
-        cell: move
+        move: move
     };
-
-    return await sendPostRequest(url, data);
+    sendMessage(message);
 }
 
 function update(game, nick, onUpdate, onError) {
-    if (!game || !nick) {
-        throw new Error("Game ID and nickname are required to update the game.");
-    }
-
-    const url = `${SERVER_URL}update?game=${encodeURIComponent(game)}&nick=${encodeURIComponent(nick)}`;
-    const eventSource = new EventSource(url);
-
-    eventSource.onmessage = function (event) {
-        const gameUpdate = JSON.parse(event.data);
-        onUpdate(gameUpdate); // Custom callback for handling updates
+    const message = {
+        type: "update",
+        game: game,
+        nick: nick
     };
+    sendMessage(message);
 
-    eventSource.onerror = function (error) {
-        console.error("Erro ao atualizar o jogo:", error);
-        eventSource.close(); // Close connection on error
-        if (onError) onError(error); // Custom error callback
-    };
-
-    return eventSource;
+    // The `onUpdate` and `onError` can be handled in `handleServerResponse`
+    // based on the server's response.
 }
+
+// Initialize the WebSocket connection when the script loads
+initWebSocket();
 
 
 register("player1", "securePassword123").then(response => {

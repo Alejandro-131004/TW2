@@ -98,24 +98,28 @@ async function initiateMatchmaking(firstPlayer, numSquares) {
         return;
     }
 
-    try {
-        // Request to join a game
-        const response = await join(numSquares, nick, password);
+    const message = {
+        type: "join",
+        group: "default", // Use your preferred group name
+        nick: nick,
+        password: password,
+        size: numSquares,
+    };
 
-        if (response && response.error) {
+    sendMessage(message);
+
+    // Listen for a response from the server
+    socket.onmessage = function (event) {
+        const response = JSON.parse(event.data);
+        if (response.type === "join" && response.game) {
+            currentMatch = response.game;
+            checkForOpponent(response.game, firstPlayer, numSquares);
+        } else if (response.error) {
             alert(`Erro ao entrar na partida: ${response.error}`);
-            return;
         }
-
-        // Store the match information
-        currentMatch = response.game;
-
-        // Check for opponent with timeout
-        checkForOpponent(response.game, firstPlayer, numSquares);
-    } catch (error) {
-        console.error("Erro ao entrar no jogo:", error);
-    }
+    };
 }
+
 
 // Check for an opponent with the same configurations
 function checkForOpponent(gameId, preferredColor, numSquares) {
@@ -127,20 +131,33 @@ function checkForOpponent(gameId, preferredColor, numSquares) {
         leaveGame(gameId);
     }, timeoutDuration);
 
-    const checkInterval = setInterval(async () => {
-        const gameState = await updateGameState(gameId);
-        if (gameState && gameState.players.length === 2) {
+    const checkInterval = setInterval(() => {
+        const message = {
+            type: "update",
+            game: gameId,
+            nick: localStorage.getItem('nick'),
+        };
+        sendMessage(message);
+    }, interval);
+
+    // Handle incoming game updates
+    socket.onmessage = function (event) {
+        const gameState = JSON.parse(event.data);
+
+        if (gameState.type === "update" && gameState.players.length === 2) {
             clearTimeout(matchTimeout);
             clearInterval(checkInterval);
 
-            // Handle color conflict
-            const opponentColor = gameState.players[0].color === preferredColor ? 
-                (preferredColor === "red" ? "blue" : "red") : preferredColor;
+            const opponentColor =
+                gameState.players[0].color === preferredColor
+                    ? (preferredColor === "red" ? "blue" : "red")
+                    : preferredColor;
 
             startTwoPlayerGame(preferredColor, opponentColor, numSquares);
         }
-    }, interval);
+    };
 }
+
 
 // Start the two-player game
 function startTwoPlayerGame(playerColor, opponentColor, numSquares) {
@@ -165,12 +182,26 @@ function startTwoPlayerGame(playerColor, opponentColor, numSquares) {
 
 // Leave the game
 async function leaveGame(gameId) {
-    const nick = localStorage.getItem('nick');
-    const password = localStorage.getItem('password');
-    await leave(nick, password, gameId);
-    currentMatch = null;
-    alert("Você saiu da partida.");
+    const message = {
+        type: "leave",
+        nick: localStorage.getItem('nick'),
+        password: localStorage.getItem('password'),
+        game: gameId,
+    };
+
+    sendMessage(message);
+
+    socket.onmessage = function (event) {
+        const response = JSON.parse(event.data);
+        if (response.type === "leave" && !response.error) {
+            currentMatch = null;
+            alert("Você saiu da partida.");
+        } else if (response.error) {
+            alert(`Erro ao sair da partida: ${response.error}`);
+        }
+    };
 }
+
 
 
 
