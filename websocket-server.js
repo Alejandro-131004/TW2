@@ -64,31 +64,119 @@ wss.on('connection', (ws) => {
 // Handlers for different request types
 
 function handleRegister(ws, { nick, password }) {
+    // Validate input
     if (!nick || !password) {
-        return sendJSON(ws, { error: 'Nickname and password are required.' });
+        return sendJSON(ws, {
+            type: 'error',
+            error: 'Nickname and password are required.'
+        });
     }
 
+    // Check if the nickname is already taken
     if (users[nick]) {
-        return sendJSON(ws, { error: 'Nickname is already taken.' });
+        return sendJSON(ws, {
+            type: 'error',
+            error: 'Nickname is already taken.'
+        });
     }
 
+    // Register the user
     users[nick] = { password };
-    sendJSON(ws, { message: 'User registered successfully.' });
+    sendJSON(ws, {
+        type: 'register',
+        message: 'User registered successfully.'
+    });
+
+    console.log(`User registered: ${nick}`);
 }
 
-function handleJoin(ws, { group, nick, password, size }) {
-    if (!group || !nick || !password || !size) {
-        return sendJSON(ws, { error: 'Group, nickname, password, and size are required.' });
+
+function handleJoin(ws, { nick, password, size }) {
+    console.log(`Player ${nick} is trying to join a game.`);
+
+    // Validate input
+    if (!nick || !password || !size) {
+        return sendJSON(ws, { 
+            type: 'error', 
+            error: 'Nick, password, and size are required.' 
+        });
     }
 
-    if (!users[nick] || users[nick].password !== password) {
-        return sendJSON(ws, { error: 'Invalid nickname or password.' });
+    // Validate the user
+    const user = users[nick];
+    if (!user || user.password !== password) {
+        return sendJSON(ws, { 
+            type: 'error', 
+            error: 'Invalid nickname or password.' 
+        });
     }
 
-    const gameId = `game-${gameIdCounter++}`;
-    games[gameId] = { group, size, players: [nick], moves: [] };
-    sendJSON(ws, { game: gameId });
+    // Check if there's an existing game waiting for a player
+    let game = Object.values(games).find(
+        g => g.players.length === 1 && g.size === size
+    );
+
+    if (!game) {
+        // Create a new game if none is available
+        const gameId = `game_${gameIdCounter++}`;
+        game = {
+            id: gameId,
+            size,
+            players: [{ nick, ws, color: 'red' }],
+        };
+        games[gameId] = game;
+
+        sendJSON(ws, {
+            type: 'waiting',
+            message: 'Waiting for an opponent',
+            game: { id: gameId, size },
+        });
+
+        console.log(`Game ${gameId} created. Waiting for an opponent.`);
+    } else {
+        // Ensure the player isn't joining the same game twice
+        if (game.players.some(player => player.nick === nick)) {
+            return sendJSON(ws, { 
+                type: 'error', 
+                error: 'You are already in this game.' 
+            });
+        }
+
+        // Add the second player to the game
+        game.players.push({ nick, ws, color: 'blue' });
+
+        // Notify both players that the game is starting
+        game.players.forEach(player => {
+            sendJSON(player.ws, {
+                type: 'start',
+                message: 'Game is starting',
+                game: {
+                    id: game.id,
+                    size: game.size,
+                    players: game.players.map(p => ({ nick: p.nick, color: p.color })),
+                },
+            });
+        });
+
+        console.log(`Game ${game.id} is starting with players:`, game.players.map(p => p.nick));
+    }
+
+    // Handle disconnections to clean up unfinished games
+    ws.on('close', () => {
+        game.players = game.players.filter(player => player.ws !== ws);
+        if (game.players.length === 0) {
+            delete games[game.id];
+            console.log(`Game ${game.id} removed due to no active players.`);
+        } else {
+            console.log(`Player ${nick} disconnected from game ${game.id}.`);
+        }
+    });
 }
+
+
+
+
+
 
 function handleLeave(ws, { nick, password, game }) {
     if (!nick || !password || !game) {

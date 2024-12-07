@@ -20,6 +20,7 @@ let aiLevel ;
 let alerta = 1;
 let isAiTurn = false;
 let gameEnded = false;
+let checkInterval;
 
 /*----------------------------------------------------------------------------------COMEÇAR O JOGO----------------------------------------------------------------------------------*/
 function updateFirstPlayerOptions() {
@@ -121,56 +122,84 @@ async function initiateMatchmaking(firstPlayer, numSquares) {
 }
 
 
-// Check for an opponent with the same configurations
 function checkForOpponent(gameId, preferredColor, numSquares) {
+    console.log("Checking for opponent:", { gameId, preferredColor, numSquares });
+
     const timeoutDuration = 30000; // 30 seconds timeout
     const interval = 2000; // Poll every 2 seconds
 
     matchTimeout = setTimeout(() => {
         alert("Nenhum oponente encontrado dentro do tempo limite.");
+        console.log("Timeout reached: No opponent found.");
         leaveGame(gameId);
     }, timeoutDuration);
 
-    const checkInterval = setInterval(() => {
-        const message = {
-            type: "update",
-            game: gameId,
-            nick: localStorage.getItem('nick'),
-        };
-        sendMessage(message);
-    }, interval);
+    const checkInterval = setInterval(async () => {
+        console.log("Polling game state for game:", gameId);
 
-    // Handle incoming game updates
-    socket.onmessage = function (event) {
-        const gameState = JSON.parse(event.data);
+        try {
+            const gameState = await updateGameState(gameId);
+            console.log("Game state received:", gameState);
 
-        if (gameState.type === "update" && gameState.players.length === 2) {
-            clearTimeout(matchTimeout);
-            clearInterval(checkInterval);
+            if (gameState && gameState.players.length === 2) {
+                console.log("Opponent found. Starting game...");
+                clearTimeout(matchTimeout);
+                clearInterval(checkInterval);
 
-            const opponentColor =
-                gameState.players[0].color === preferredColor
-                    ? (preferredColor === "red" ? "blue" : "red")
-                    : preferredColor;
+                // Handle color conflict
+                const opponentColor = gameState.players[0].color === preferredColor ?
+                    (preferredColor === "red" ? "blue" : "red") : preferredColor;
 
-            startTwoPlayerGame(preferredColor, opponentColor, numSquares);
+                startTwoPlayerGame(preferredColor, opponentColor, numSquares);
+            }
+        } catch (error) {
+            console.error("Error while updating game state:", error);
         }
-    };
+    }, interval);
 }
+
+async function updateGameState(gameId) {
+    console.log("Fetching game state for gameId:", gameId);
+
+    try {
+        const response = await fetch(`/api/game/${gameId}`);
+        if (!response.ok) {
+            console.error("Failed to fetch game state:", response.statusText);
+            return null;
+        }
+
+        const gameState = await response.json();
+        console.log("Game state fetched successfully:", gameState);
+        return gameState;
+    } catch (error) {
+        console.error("Error fetching game state:", error);
+        return null;
+    }
+}
+
 
 
 // Start the two-player game
 function startTwoPlayerGame(playerColor, opponentColor, numSquares) {
+    console.log("Initializing game with parameters:", { playerColor, opponentColor, numSquares });
+
     clearTimeout(matchTimeout);
     resetBoard();
-    generateBoard(numSquares);
-    createPieceStorage(numSquares);
+    console.log("Board reset");
 
-    // Game initialization
+    generateBoard(numSquares);
+    console.log("Board generated");
+
+    createPieceStorage(numSquares);
+    console.log("Piece storage created");
+
+    // Initialize game state
     currentPlayer = playerColor === "red" ? "red" : "blue";
     status.textContent = `Vez de ${currentPlayer}. Continue jogando!`;
 
     board = Array.from({ length: numSquares }, () => Array(8).fill(null));
+    console.log("Game board initialized:", board);
+
     phase = 1;
     piecesPlaced = 0;
     redPiecesPlaced = 0;
@@ -180,27 +209,6 @@ function startTwoPlayerGame(playerColor, opponentColor, numSquares) {
     console.log(`Game started: Player color: ${playerColor}, Opponent color: ${opponentColor}`);
 }
 
-// Leave the game
-async function leaveGame(gameId) {
-    const message = {
-        type: "leave",
-        nick: localStorage.getItem('nick'),
-        password: localStorage.getItem('password'),
-        game: gameId,
-    };
-
-    sendMessage(message);
-
-    socket.onmessage = function (event) {
-        const response = JSON.parse(event.data);
-        if (response.type === "leave" && !response.error) {
-            currentMatch = null;
-            alert("Você saiu da partida.");
-        } else if (response.error) {
-            alert(`Erro ao sair da partida: ${response.error}`);
-        }
-    };
-}
 
 
 
@@ -1494,30 +1502,43 @@ const startGameButton = document.getElementById("start-game");
 let gameMode = "player"; // Dois jogadores por padrão
 let firstPlayer = "red"; // Red inicia por padrão 
 
-// Ativa ou desativa o ni­vel de IA com base no modo selecionado
-gameModeSelect.addEventListener("change", function () {
-    gameMode = gameModeSelect.value;
-    aiLevelSelect.disabled = gameMode !== "computer";
+
+
+document.addEventListener("DOMContentLoaded", () => {
+    // Match IDs with your HTML
+    const startGameButton = document.querySelector('button[onclick="initializeGame()"]'); // Adjusted for the button
+    const firstPlayerSelect = document.getElementById("first-player"); // Fixed ID
+    const aiLevelSelect = document.getElementById("ai-level"); // Fixed ID
+    const gameModeSelect = document.getElementById("game-mode"); // Fixed ID
+    const quitGameButton = document.getElementById("quit-game");
+
+    // Check if elements exist
+    if (!startGameButton || !firstPlayerSelect || !aiLevelSelect || !gameModeSelect || !quitGameButton) {
+        console.error("Required elements not found in the DOM.");
+        return;
+    }
+
+    // Add event listener for start game button
+    startGameButton.addEventListener("click", () => {
+        const firstPlayer = firstPlayerSelect.value;
+        const aiLevel = aiLevelSelect.value;
+        const gameMode = gameModeSelect.value;
+
+        // Initialize the game with selected settings
+        initializeGame(gameMode, firstPlayer, aiLevel);
+    });
+
+    // Enable or disable AI level based on game mode
+    gameModeSelect.addEventListener("change", () => {
+        aiLevelSelect.disabled = gameModeSelect.value !== "computer";
+    });
+
+    // Quit game functionality
+    quitGameButton.addEventListener("click", () => {
+        quitGame();
+    });
 });
 
-// Captura as outras configurações ao clicar para iniciar o jogo
-startGameButton.addEventListener("click", function () {
-    firstPlayer = firstPlayerSelect.value;
-    aiLevel = aiLevelSelect.value;
-
-    // Inicializa o jogo conforme as configurações
-    initializeGame(gameMode, firstPlayer, aiLevel);
-});
-
-
-// Referência ao botão "Desistir do Jogo"
-const quitGameButton = document.getElementById("quit-game");
-
-// Adiciona um evento de clique ao botão para desistir do jogo
-
-quitGameButton.addEventListener("click", function () {
-    quitGame();
-});
 
 // Função para desistir do jogo
 function quitGame() {
