@@ -1,40 +1,76 @@
 const SERVER_URL = "ws://localhost:8008/"; // WebSocket server URL
 let socket = null; // WebSocket instance
-let currentGame = null; // Current game ID
-let isJoining = false; // Prevent multiple join attempts
+let playersReady = []; // List of players ready to play
+let gameStarted = false; // Flag to prevent multiple game starts
+let currentMatch2 = null; // Current match state
+let matchTimeout = null; // Timeout for finding an opponent
 
 // Initialize WebSocket connection
 function initWebSocket() {
-    if (socket && socket.readyState !== WebSocket.CLOSED) {
-        console.log("WebSocket already connected.");
-        return;
+    if (!socket || socket.readyState === WebSocket.CLOSED) {
+        socket = new WebSocket(SERVER_URL);
+
+        socket.onopen = function () {
+            console.log("Connected to WebSocket server.");
+        };
+
+        socket.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+            console.log("Received data:", data);
+            handleServerResponse(data);
+        };
+
+        socket.onclose = function () {
+            console.log("Disconnected from WebSocket server.");
+        };
+
+        socket.onerror = function (error) {
+            console.error("WebSocket error:", error);
+        };
+    } else {
+        console.log("WebSocket is already open or in the process of connecting.");
     }
+}
+// Função para autenticar o jogador e exibir o menu de configurações
 
-    socket = new WebSocket(SERVER_URL);
-
-    socket.onopen = function () {
-        console.log("Connected to WebSocket server.");
+function register(nick, password) {
+    const message = {
+        type: "register",
+        nick: nick,
+        password: password
     };
+    
+    sendMessage(message); // Send the registration message
 
+    // Wait for server response (assuming you have a global socket variable)
     socket.onmessage = function (event) {
-        const data = JSON.parse(event.data);
-        handleServerResponse(data);
-    };
-
-    socket.onclose = function () {
-        console.log("Disconnected from WebSocket server.");
-        socket = null; // Reset socket
-    };
-
-    socket.onerror = function (error) {
-        console.error("WebSocket error:", error);
+        const response = JSON.parse(event.data);
+        
+        // Check if the response is of type 'register'
+        if (response.type === "register") {
+            if (response.message === "User registered successfully.") {
+                console.log("Registration successful:", response.message);
+                alert("Registration successful!");
+                // You can now save data or proceed with login, etc.
+            } else if (response.error) {
+                console.error("Registration error:", response.error);
+                alert(`Error: ${response.error}`);
+            } else {
+                console.error("Unknown server response:", response);
+            }
+        } else {
+            console.log("Received non-registration message:", response);
+        }
     };
 }
+
+window.register = register;
+
 
 // Send a message through WebSocket
 function sendMessage(message) {
     if (socket && socket.readyState === WebSocket.OPEN) {
-        console.log("Sending message:", message);
+        console.log("Sending message:", JSON.stringify(message, null, 2)); // Pretty print the message
         socket.send(JSON.stringify(message));
     } else {
         console.error("WebSocket is not connected.");
@@ -43,37 +79,26 @@ function sendMessage(message) {
 
 // Handle responses from the server
 function handleServerResponse(data) {
-    console.log("Received data from server:", data);
-
     if (!data.type) {
         console.warn("Missing 'type' field in server response:", data);
         return;
     }
 
     switch (data.type) {
-        case "register":
-            console.log(data.message || "Registration completed.");
-            break;
-
         case "join":
-            if (data.game) {
-                console.log(`Joined game ${data.game.id} with players:`, data.game.players);
-                currentGame = data.game.id;
-                startGameIfReady(data.game);
-            } else if (data.error) {
-                console.error(`Join error: ${data.error}`);
-                isJoining = false; // Allow retry
-            }
+            handleJoinResponse(data);
             break;
 
         case "update":
-            console.log("Game state updated:", data);
-            updateBoard(data);
+            updateGameBoardFromServer(data);
             break;
 
-        case "notify":
-            console.log("Move received:", data.move);
-            applyMoveToBoard(data.move);
+        case "ready":
+            handlePlayerReady(data);
+            break;
+
+        case "start":
+            handleStartGame(data);
             break;
 
         default:
@@ -81,86 +106,111 @@ function handleServerResponse(data) {
     }
 }
 
+async function initiateMatchmaking(firstPlayer, numSquares) {
+    const nick = localStorage.getItem("nick");
+    const password = localStorage.getItem("password");
 
-// Register a player
-function register(nick, password) {
-    const message = {
-        type: "register",
-        nick: nick,
-        password: password
-    };
-    sendMessage(message);
-}
-
-// Join a game
-function join(group, nick, password, size) {
     if (!nick || !password) {
-        alert("Please log in before joining a game.");
+        alert("Você precisa se autenticar antes de iniciar um jogo.");
         return;
     }
-
-    if (isJoining) {
-        console.warn("Already attempting to join a game.");
-        return;
-    }
-
-    isJoining = true;
 
     const message = {
         type: "join",
-        group: group,
+        group: "default", // Use your preferred group name
         nick: nick,
         password: password,
-        size: size
+        size: numSquares,
     };
+
     sendMessage(message);
+
+    // Remove any previous socket onmessage handler to avoid duplicates
+    socket.onmessage = function (event) {
+        const response = JSON.parse(event.data);
+        if (response.type === "waiting" && response.game) {
+            currentMatch2 = response.game;
+            checkForOpponentInScript2(response.game.id, firstPlayer, numSquares);
+        } else if (response.error) {
+            alert(`Erro ao entrar na partida: ${response.error}`);
+        }
+        // If the message is 'start', directly start the game
+        else if (response.type === "start") {
+            startGame(response.game, firstPlayer, numSquares);
+        }
+    };
 }
 
+// Check for an opponent
+function checkForOpponentInScript2(gameId, preferredColor, numSquares) {
+    console.log("Checking for opponent:", { gameId, preferredColor, numSquares });
+
+    const timeoutDuration = 30000; // 30 seconds timeout
+
+    matchTimeout = setTimeout(() => {
+        alert("Nenhum oponente encontrado dentro do tempo limite.");
+        console.log("Timeout reached: No opponent found.");
+        leaveGame(gameId);
+    }, timeoutDuration);
+
+    // Wait for the 'start' signal from the WebSocket server
+    socket.onmessage = function (event) {
+        const message = JSON.parse(event.data);
+        console.log("Message received from server:", message);
+
+        if (message.type === "start") {
+            console.log("Game is starting...");
+
+            clearTimeout(matchTimeout);
+
+            // Directly call startGame with the necessary data
+            startGame(message.game, preferredColor, numSquares);
+        }
+    };
+}
+
+// Function to start the game
+function startGame(gameState, preferredColor, numSquares) {
+    // Assuming the message contains the game state
+    console.log("Starting the game with the following data:", gameState);
+
+    const opponentColor = gameState.players[0].color === preferredColor
+        ? preferredColor === "red"
+            ? "blue"
+            : "red"
+        : preferredColor;
+
+    // Start the two-player game
+    window.startTwoPlayerGame(preferredColor, opponentColor, numSquares);
+}
+
+
+
+// Start the two-player game
+
+
 // Leave a game
-function leave(nick, password, game) {
+function leaveGame(gameId) {
+    const nick = localStorage.getItem("nick");
+    const password = localStorage.getItem("password");
+
+    if (!nick || !password || !gameId) {
+        console.warn("Cannot leave game without proper authentication or game ID.");
+        return;
+    }
+
     const message = {
         type: "leave",
         nick: nick,
         password: password,
-        game: game
+        game: gameId,
     };
     sendMessage(message);
-    currentGame = null; // Clear current game
+
+    // Reset game state
+    currentMatch2 = null;
+    console.log("Left the game.");
 }
-
-// Notify a move
-function notify(nick, password, game, move) {
-    const message = {
-        type: "notify",
-        nick: nick,
-        password: password,
-        game: game,
-        move: move
-    };
-    sendMessage(message);
-}
-
-// Update game state
-function update(game, nick) {
-    const message = {
-        type: "update",
-        game: game,
-        nick: nick
-    };
-    sendMessage(message);
-}
-
-// Start the game if players are ready
-function startGameIfReady(game) {
-    if (game.players.length === 2) {
-        console.log("Game is ready to start with players:", game.players);
-        initializeGameBoard(game.size, game.players);
-    } else {
-        console.log("Waiting for more players...");
-    }
-}
-
-
 
 // Initialize the WebSocket connection when the script loads
 initWebSocket();

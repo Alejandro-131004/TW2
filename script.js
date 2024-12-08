@@ -61,11 +61,44 @@ document.getElementById("game-mode").addEventListener("change", updateFirstPlaye
 // Chama a função uma vez para definir as opções iniciais
 document.addEventListener("DOMContentLoaded", updateFirstPlayerOptions);
 
+async function authenticateUser(event) {
+    event.preventDefault(); // Impede o envio real do formulário
 
+    // Obtém os valores do formulário
+    let username = document.getElementById('username').value.trim();
+    let password = document.getElementById('password').value.trim();
+    console.log(username)
+    if (!username || !password) {
+        alert("Por favor, preencha todos os campos.");
+        return;
+    }
 
-// Global variables to track game state and timeout
-let matchTimeout = null;
-let currentMatch = null;
+    try {
+        // Realiza o registro no servidor
+        const response = await window.register(username, password);
+
+        if (response && response.error) {
+            // Mostra o erro retornado pelo servidor
+            alert(`Erro ao autenticar: ${response.error}`);
+            return;
+        }
+
+        // Sucesso: Oculta a área de identificação e exibe as configurações de jogo
+        alert("Autenticação realizada com sucesso!");
+        document.getElementById('identification').style.display = 'none';
+        document.getElementById('config-area').style.display = 'block';
+
+        // Atualiza o status para "Configurações de Jogo"
+        document.getElementById('status').textContent = "Configurações de Jogo";
+
+        // Salva o nome do jogador para uso posterior
+        localStorage.setItem('nick', username);
+        localStorage.setItem('password', password);
+    } catch (error) {
+        console.error("Erro ao autenticar o jogador:", error);
+        alert("Ocorreu um erro ao tentar autenticar. Tente novamente.");
+    }
+}
 
 // Updated initializeGame function
 function initializeGame() {
@@ -85,101 +118,22 @@ function initializeGame() {
     if (gameMode === "computer") {
         startGameWithAI(firstPlayer);
     } else {
-        initiateMatchmaking(firstPlayer, numSquares);
-    }
-}
-
-// Matchmaking process for two players
-async function initiateMatchmaking(firstPlayer, numSquares) {
-    const nick = localStorage.getItem('nick');
-    const password = localStorage.getItem('password');
-
-    if (!nick || !password) {
-        alert("Você precisa se autenticar antes de iniciar um jogo.");
-        return;
-    }
-
-    const message = {
-        type: "join",
-        group: "default", // Use your preferred group name
-        nick: nick,
-        password: password,
-        size: numSquares,
-    };
-
-    sendMessage(message);
-
-    // Listen for a response from the server
-    socket.onmessage = function (event) {
-        const response = JSON.parse(event.data);
-        if (response.type === "join" && response.game) {
-            currentMatch = response.game;
-            checkForOpponent(response.game, firstPlayer, numSquares);
-        } else if (response.error) {
-            alert(`Erro ao entrar na partida: ${response.error}`);
-        }
-    };
-}
-
-
-function checkForOpponent(gameId, preferredColor, numSquares) {
-    console.log("Checking for opponent:", { gameId, preferredColor, numSquares });
-
-    const timeoutDuration = 30000; // 30 seconds timeout
-    const interval = 2000; // Poll every 2 seconds
-
-    matchTimeout = setTimeout(() => {
-        alert("Nenhum oponente encontrado dentro do tempo limite.");
-        console.log("Timeout reached: No opponent found.");
-        leaveGame(gameId);
-    }, timeoutDuration);
-
-    const checkInterval = setInterval(async () => {
-        console.log("Polling game state for game:", gameId);
-
-        try {
-            const gameState = await updateGameState(gameId);
-            console.log("Game state received:", gameState);
-
-            if (gameState && gameState.players.length === 2) {
-                console.log("Opponent found. Starting game...");
-                clearTimeout(matchTimeout);
-                clearInterval(checkInterval);
-
-                // Handle color conflict
-                const opponentColor = gameState.players[0].color === preferredColor ?
-                    (preferredColor === "red" ? "blue" : "red") : preferredColor;
-
-                startTwoPlayerGame(preferredColor, opponentColor, numSquares);
-            }
-        } catch (error) {
-            console.error("Error while updating game state:", error);
-        }
-    }, interval);
-}
-
-async function updateGameState(gameId) {
-    console.log("Fetching game state for gameId:", gameId);
-
-    try {
-        const response = await fetch(`/api/game/${gameId}`);
-        if (!response.ok) {
-            console.error("Failed to fetch game state:", response.statusText);
-            return null;
-        }
-
-        const gameState = await response.json();
-        console.log("Game state fetched successfully:", gameState);
-        return gameState;
-    } catch (error) {
-        console.error("Error fetching game state:", error);
-        return null;
+        window.initiateMatchmaking(firstPlayer, numSquares);
     }
 }
 
 
-
-// Start the two-player game
+function sound(src) {
+    this.sound = document.createElement("audio");
+    this.sound.src = src;
+    this.sound.setAttribute("preload", "auto");
+    this.sound.setAttribute("controls", "none");
+    this.sound.style.display = "none";
+    document.body.appendChild(this.sound);
+    this.play = function () {
+        this.sound.play();
+    }
+}
 function startTwoPlayerGame(playerColor, opponentColor, numSquares) {
     console.log("Initializing game with parameters:", { playerColor, opponentColor, numSquares });
 
@@ -208,24 +162,7 @@ function startTwoPlayerGame(playerColor, opponentColor, numSquares) {
     maxPieces = getNumberOfPieces(numSquares) / 2;
     console.log(`Game started: Player color: ${playerColor}, Opponent color: ${opponentColor}`);
 }
-
-
-
-
-
-function sound(src) {
-    this.sound = document.createElement("audio");
-    this.sound.src = src;
-    this.sound.setAttribute("preload", "auto");
-    this.sound.setAttribute("controls", "none");
-    this.sound.style.display = "none";
-    document.body.appendChild(this.sound);
-    this.play = function () {
-        this.sound.play();
-    }
-}
-
-
+window.startTwoPlayerGame = startTwoPlayerGame
 /*--------------------------------------------------------------------------------IMPLEMENTAÃ‡ÃƒO DO JOGO--------------------------------------------------------------------------------*/
 
 function startGame(firstPlayer) {
@@ -1654,44 +1591,6 @@ function toggleAuth() {
     }
 }
 
-// Função para autenticar o jogador e exibir o menu de configurações
-async function authenticateUser(event) {
-    event.preventDefault(); // Impede o envio real do formulário
 
-    // Obtém os valores do formulário
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value.trim();
-
-    if (!username || !password) {
-        alert("Por favor, preencha todos os campos.");
-        return;
-    }
-
-    try {
-        // Realiza o registro no servidor
-        const response = await register(username, password);
-
-        if (response && response.error) {
-            // Mostra o erro retornado pelo servidor
-            alert(`Erro ao autenticar: ${response.error}`);
-            return;
-        }
-
-        // Sucesso: Oculta a área de identificação e exibe as configurações de jogo
-        alert("Autenticação realizada com sucesso!");
-        document.getElementById('identification').style.display = 'none';
-        document.getElementById('config-area').style.display = 'block';
-
-        // Atualiza o status para "Configurações de Jogo"
-        document.getElementById('status').textContent = "Configurações de Jogo";
-
-        // Salva o nome do jogador para uso posterior
-        localStorage.setItem('nick', username);
-        localStorage.setItem('password', password);
-    } catch (error) {
-        console.error("Erro ao autenticar o jogador:", error);
-        alert("Ocorreu um erro ao tentar autenticar. Tente novamente.");
-    }
-}
 
 

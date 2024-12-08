@@ -111,19 +111,13 @@ function handleJoin(ws, { nick, password, size }) {
         });
     }
 
-    // Check if there's an existing game waiting for a player
-    let game = Object.values(games).find(
-        g => g.players.length === 1 && g.size === size
-    );
+    // Check if there's a game waiting for a player
+    let game = Object.values(games).find(g => g.players.length === 1 && g.size === size);
 
     if (!game) {
         // Create a new game if none is available
         const gameId = `game_${gameIdCounter++}`;
-        game = {
-            id: gameId,
-            size,
-            players: [{ nick, ws, color: 'red' }],
-        };
+        game = { id: gameId, size, players: [{ nick, ws, color: 'red' }] };
         games[gameId] = game;
 
         sendJSON(ws, {
@@ -134,7 +128,7 @@ function handleJoin(ws, { nick, password, size }) {
 
         console.log(`Game ${gameId} created. Waiting for an opponent.`);
     } else {
-        // Ensure the player isn't joining the same game twice
+        // Check if the player is already in the game
         if (game.players.some(player => player.nick === nick)) {
             return sendJSON(ws, { 
                 type: 'error', 
@@ -150,15 +144,11 @@ function handleJoin(ws, { nick, password, size }) {
             sendJSON(player.ws, {
                 type: 'start',
                 message: 'Game is starting',
-                game: {
-                    id: game.id,
-                    size: game.size,
-                    players: game.players.map(p => ({ nick: p.nick, color: p.color })),
-                },
-            });
+                game: { id: game.id, size, players: game.players.map(p => ({ nick: p.nick, color: p.color })) },
+            });            
         });
 
-        console.log(`Game ${game.id} is starting with players:`, game.players.map(p => p.nick));
+        console.log(`Game ${game.id} started with players: ${game.players.map(p => p.nick).join(', ')}`);
     }
 
     // Handle disconnections to clean up unfinished games
@@ -172,6 +162,7 @@ function handleJoin(ws, { nick, password, size }) {
         }
     });
 }
+
 
 
 
