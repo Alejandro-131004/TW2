@@ -344,12 +344,18 @@ function reporPeca(cor, indice) {
 
 
 function handleCellClick(cell) {
-    if (isAiTurn) return;
+    // Block actions if it's the opponent's turn
+    if (isAiTurn || currentPlayer !== playerColor) {
+        console.log("It's not your turn!");
+        return;
+    }
     const [square, index] = cell.id.split('-').slice(1).map(Number);
+
     if (phase === 1 && board[square][index] === null) {
         placePiece(cell);
     } else if (phase === 1 && board[square][index] !== null) {
-        //removePieceIfValid(cell); 
+        // Uncomment if you want to handle piece removal in phase 1
+        // removePieceIfValid(cell); 
     } else if (phase === 2) {
         handleMove(cell);
     }
@@ -406,16 +412,24 @@ function placePiece(cell) {
 
 function togglePlayer() {
     currentPlayer = currentPlayer === 'red' ? 'blue' : 'red';
-    console.log("joagador:", currentPlayer);
-    if(gameMode === "computer"){
+    console.log("Jogador:", currentPlayer);
+
+    if (gameMode === "computer") {
         togglePlayerAI();
+    } else if (gameMode === "multiplayer" && currentPlayer !== localPlayerColor) {
+        // If it's the opponent's turn, wait for their move
+        window.processPlayerAction();
     }
-    if (win===false){
+
+    if (!win) {
         status.textContent = `Vez de ${currentPlayer}.`;
     }
-  
-    updatePieceCount(); 
+
+    updatePieceCount();
 }
+
+
+
 
 function togglePlayerAI() {
     // Alternate between 'red' (human) and 'computerColor' (AI)

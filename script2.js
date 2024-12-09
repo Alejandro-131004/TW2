@@ -211,6 +211,39 @@ function leaveGame(gameId) {
     currentMatch2 = null;
     console.log("Left the game.");
 }
+function processPlayerAction(clickedCell, goalCell) {
+    if (!clickedCell) {
+        console.error("No cell was clicked.");
+        return;
+    }
 
+    // Check if the game is in phase 1 based on goalCell
+    if (goalCell.x === -1 && goalCell.y === -1) {
+        console.log("Phase 1: Placing a piece.");
+        // Call the placePiece function from another file
+        window.placePiece(clickedCell);
+    } else {
+        console.log("Phase 2: Moving a piece.");
+        // Check if the move is valid
+        const isValid = window.isMoveValid(clickedCell, goalCell);
+
+        if (isValid) {
+            console.log("Move is valid. Sending to the server...");
+            // Notify the server about the move
+            const moveData = {
+                from: clickedCell,
+                to: goalCell,
+            };
+            notifyMoveToServer(moveData); // Assumes you have this function implemented
+
+            // Call makeMove to update the local board state
+            window.makeMove(clickedCell, goalCell);
+        } else {
+            console.error("Invalid move. Try again.");
+        }
+    }
+}
+
+window.processPlayerAction = processPlayerAction
 // Initialize the WebSocket connection when the script loads
 initWebSocket();

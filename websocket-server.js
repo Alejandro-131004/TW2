@@ -13,7 +13,6 @@ let gameIdCounter = 1;
 
 console.log(`WebSocket server running on ws://localhost:${PORT}/`);
 
-// Helper to send JSON messages
 function sendJSON(ws, data) {
     ws.send(JSON.stringify(data));
 }
@@ -45,6 +44,10 @@ wss.on('connection', (ws) => {
 
                 case 'update':
                     handleUpdate(ws, request);
+                    break;
+
+                case 'move':
+                    handleMove(ws, request);
                     break;
 
                 default:
@@ -220,4 +223,52 @@ function handleUpdate(ws, { game, nick }) {
     }
 
     sendJSON(ws, { game, players: games[game].players, moves: games[game].moves });
+}
+
+// Handle player moves
+function handleMove(ws, { nick, gameId, move }) {
+    console.log(`Player ${nick} made a move in game ${gameId}:`, move);
+
+    const game = games[gameId];
+
+    if (!game) {
+        return sendJSON(ws, { 
+            type: 'error', 
+            error: 'Game not found.' 
+        });
+    }
+
+    const player = game.players.find(player => player.nick === nick);
+
+    if (!player) {
+        return sendJSON(ws, { 
+            type: 'error', 
+            error: 'Player not found in this game.' 
+        });
+    }
+
+    // Validate move object
+    const { start, end } = move;
+
+    if (!start || !end) {
+        return sendJSON(ws, { 
+            type: 'error', 
+            error: 'Move must include both start and end points.' 
+        });
+    }
+
+    console.log(`Move details - Start: ${start}, End: ${end}`);
+
+    // Broadcast the move to the opponent
+    game.players.forEach(otherPlayer => {
+        if (otherPlayer.ws !== ws) {
+            sendJSON(otherPlayer.ws, {
+                type: 'move',
+                message: `${nick} made a move`,
+                move: { start, end },
+            });
+        }
+    });
+
+    console.log(`Move transmitted to opponent in game ${gameId}`);
 }
