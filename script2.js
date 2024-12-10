@@ -16,7 +16,7 @@ function initWebSocket() {
 
         socket.onmessage = function (event) {
             const data = JSON.parse(event.data);
-            console.log("Received data:", data);
+            //console.log("Received data:", data);
             handleServerResponse(data);
         };
 
@@ -41,27 +41,6 @@ function register(nick, password) {
     };
     
     sendMessage(message); // Send the registration message
-
-    // Wait for server response (assuming you have a global socket variable)
-    socket.onmessage = function (event) {
-        const response = JSON.parse(event.data);
-        
-        // Check if the response is of type 'register'
-        if (response.type === "register") {
-            if (response.message === "User registered successfully.") {
-                console.log("Registration successful:", response.message);
-                alert("Registration successful!");
-                // You can now save data or proceed with login, etc.
-            } else if (response.error) {
-                console.error("Registration error:", response.error);
-                alert(`Error: ${response.error}`);
-            } else {
-                console.error("Unknown server response:", response);
-            }
-        } else {
-            console.log("Received non-registration message:", response);
-        }
-    };
 }
 
 window.register = register;
@@ -99,6 +78,14 @@ function handleServerResponse(data) {
 
         case "start":
             handleStartGame(data);
+            break;
+        
+        case "register":
+            console.log(`Registration successful (${data.status}): ${data.message}`);
+            break;
+
+        case "error":
+            console.error(`Error (${data.status}): ${data.error}`);
             break;
 
         default:
@@ -243,6 +230,7 @@ function processPlayerAction(clickedCell, goalCell) {
         }
     }
 }
+
 
 window.processPlayerAction = processPlayerAction
 // Initialize the WebSocket connection when the script loads
