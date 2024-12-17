@@ -14,7 +14,7 @@ let matchTimeout = null;
 // Função para interpretar a resposta do servidor após fetch
 function handleServerResponse(data) {
     const { type,statusCode, status, message } = data;
-
+    console.log(statusCode)
     if (!type || statusCode === undefined) {
         console.error("Invalid server response format:", data);
         alert("Erro: resposta inválida do servidor.");

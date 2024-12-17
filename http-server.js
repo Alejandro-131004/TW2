@@ -165,7 +165,7 @@ function handleRegister(res, { nick, password }) {
             return sendResponse(res, 401, 'error', 'register', 'Incorrect password for this nickname.');
         }
         // User exists and password matches
-        return sendResponse(res, 200, 'success', 'register', 'User loaded successfully.');
+        return sendResponse(res, 200, 'success', 'register', 'User already registered.');
     }
 
     // If user does not exist, register a new user
