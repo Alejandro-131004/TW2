@@ -1,9 +1,26 @@
 const http = require('http');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const PORT = 8008;
-const users = {};
+const USERS_FILE = path.resolve('./users.json');
 const games = {};
+
+// Ensure the user file exists
+if (!fs.existsSync(USERS_FILE)) {
+    fs.writeFileSync(USERS_FILE, JSON.stringify({}, null, 2));
+}
+
+// Load users from the file
+function loadUsers() {
+    return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+}
+
+// Save users to the file
+function saveUsers(users) {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
 
 console.log(`HTTP server running on http://localhost:${PORT}/`);
 
@@ -13,9 +30,13 @@ function setCORSHeaders(res) {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); // Allowed headers
 }
 
-
 function sendResponse(res, statusCode, status, type, message, additionalData = {}) {
-    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+    res.writeHead(statusCode, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*', // Allow all origins for testing
+        'Access-Control-Allow-Methods': 'POST',
+        'Access-Control-Allow-Headers': 'Content-Type'
+    });
     res.end(JSON.stringify({ status, type, message, ...additionalData }));
 }
 
@@ -89,16 +110,15 @@ async function handleRequest(req, res) {
     });
 }
 
-
 function handleRegister(res, { nick, password }) {
     if (!nick || !password) {
         return sendResponse(res, 400, 'error', 'register', 'Nickname and password are required.');
     }
 
-    const existingUser = users[nick];
+    const users = loadUsers();
 
-    if (existingUser) {
-        if (!validatePassword(password, existingUser.hash, existingUser.salt)) {
+    if (users[nick]) {
+        if (!validatePassword(password, users[nick].hash, users[nick].salt)) {
             return sendResponse(res, 401, 'error', 'register', 'Nickname is already taken with a different password.');
         } else {
             return sendResponse(res, 200, 'success', 'register', 'User already registered.');
@@ -107,6 +127,7 @@ function handleRegister(res, { nick, password }) {
 
     const { salt, hash } = encryptPassword(password);
     users[nick] = { salt, hash };
+    saveUsers(users);
     console.log(`User registered: ${nick}`);
     return sendResponse(res, 200, 'success', 'register', 'Registration successful.');
 }
@@ -116,8 +137,9 @@ function handleJoin(res, { nick, password, size }) {
         return sendResponse(res, 400, 'error', 'join', 'Nick, password, and size are required.');
     }
 
-    const user = users[nick];
-    if (!user || !validatePassword(password, user.hash, user.salt)) {
+    const users = loadUsers();
+
+    if (!users[nick] || !validatePassword(password, users[nick].hash, users[nick].salt)) {
         return sendResponse(res, 400, 'error', 'join', 'Invalid nickname or password.');
     }
 

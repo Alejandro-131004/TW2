@@ -12,49 +12,100 @@ let currentMatch2 = null;
 let matchTimeout = null;
 
 // Função para interpretar a resposta do servidor após fetch
+// Função para interpretar a resposta do servidor após fetch
 function handleServerResponse(data) {
     const { type, status, message } = data;
 
+    if (!type || status === undefined) {
+        console.error("Invalid server response format:", data);
+        return;
+    }
+
     switch (type) {
         case "register":
-            // Respostas do tipo register (apenas login/registro)
+            // Responses for registration/login
+            case "register":
+            // Registration/Login Responses
             if (status === 200) {
                 if (message === "Registration successful.") {
                     console.log("Register/Login successful:", message);
+                    return true; // Indicate success
                 } else if (message === "User already registered.") {
                     console.log("This user is already registered with the same password:", message);
+                    return true; // Still considered successful
                 }
             } else if (status === 401) {
                 console.error("Register/Login failed (401):", message);
+                alert(`Authentication failed: ${message}`);
+                return false; // Indicate failure
             } else if (status === 400) {
                 console.error("Register/Login failed (400):", message);
+                alert(`Bad request: ${message}`);
+                return false; // Indicate failure
+            }
+            break;
+
+        case "join":
+            // Responses for joining a game
+            if (status === 200) {
+                console.log("Matchmaking started successfully:", message);
+            } else {
+                console.error(`Failed to join game (${status}):`, message);
+            }
+            break;
+
+        case "update":
+            // Responses for game state updates
+            if (status === 200) {
+                console.log("Game update received:", message || "Update successful.");
+            } else {
+                console.error(`Game update failed (${status}):`, message);
+            }
+            break;
+
+        case "leave":
+            // Responses for leaving a game
+            if (status === 200) {
+                console.log("Left the game successfully:", message || "Leave successful.");
+            } else {
+                console.error(`Failed to leave game (${status}):`, message);
+            }
+            break;
+
+        case "notify":
+            // Responses for player action notifications
+            if (status === 200) {
+                console.log("Player action notified successfully:", message);
+            } else {
+                console.error(`Failed to notify player action (${status}):`, message);
             }
             break;
 
         case "success":
-            // Sempre status 200
-            console.log("Success (200):", message);
+            // General success responses
+            console.log("Success:", message);
             break;
 
         case "error":
-            // Sempre status 400
-            console.error("Error (400):", message);
+            // General error responses
+            console.error("Error:", message);
             break;
 
         default:
-            // Tipo desconhecido -> tratar como 404
-            console.error("Unknown response type (404):", message || "Unknown request type");
+            // Unknown response type
+            console.error("Unknown response type:", type, message || "No message provided.");
             break;
     }
 }
 
-// Função para registar/login
+
+// Função para registrar/login
 window.register = async function(nick, password) {
     try {
-        const response = await fetch(serverURL + "/register", {
+        const response = await fetch(serverURL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nick, password })
+            body: JSON.stringify({ type: "register", nick, password })
         });
         const data = await response.json();
         handleServerResponse(data);
@@ -63,8 +114,23 @@ window.register = async function(nick, password) {
     }
 };
 
+// Função para iniciar/joinar em um jogo
+window.joinGame = async function(nick, password, size) {
+    try {
+        const response = await fetch(serverURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: "join", nick, password, size })
+        });
+        const data = await response.json();
+        handleServerResponse(data);
+    } catch (error) {
+        console.error("Error in joinGame:", error);
+    }
+};
+
 // Iniciar matchmaking: entrar num jogo
-window.initiateMatchmaking = async function(firstPlayer, numSquares) {
+window.initiateMatchmaking = async function (firstPlayer, numSquares) {
     const nick = localStorage.getItem("nick");
     const password = localStorage.getItem("password");
 
@@ -74,82 +140,77 @@ window.initiateMatchmaking = async function(firstPlayer, numSquares) {
     }
 
     try {
-        const response = await fetch(serverURL + "/join", {
+        const response = await fetch(serverURL, { // No "/join" suffix, handled by request body
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nick, password, size: numSquares })
+            body: JSON.stringify({ type: "join", nick, password, size: numSquares })
         });
         const data = await response.json();
 
-        if (data.type === 'success' && data.status === 200) {
+        if (data.status === 200 && data.type === 'success') {
             handleServerResponse(data);
 
             if (data.message === 'Waiting for an opponent') {
                 currentMatch2 = data.game;
-                // Aguarda oponente usando polling
-                checkForOpponentInScript2(data.game.id, firstPlayer, numSquares);
+                // Polling to wait for an opponent
+                checkForOpponent(data.game.id, firstPlayer, numSquares);
             } else if (data.message === 'Game joined') {
-                // Jogo iniciado imediatamente
+                // Game started immediately
                 startGame(data.game, firstPlayer, numSquares);
             }
-        } else if (data.type === 'error') {
+        } else {
             handleServerResponse(data);
             alert(`Erro: ${data.message}`);
-        } else {
-            console.error("Resposta inesperada em initiateMatchmaking:", data);
         }
     } catch (error) {
         console.error("Error in initiateMatchmaking:", error);
     }
 };
 
-// Polling para ver se o oponente entrou
-function checkForOpponentInScript2(gameId, preferredColor, numSquares) {
+// Polling para verificar se o oponente entrou
+function checkForOpponent(gameId, preferredColor, numSquares) {
     console.log("Checking for opponent:", { gameId, preferredColor, numSquares });
 
-    const timeoutDuration = 30000; // Tempo limite de 30s
+    const timeoutDuration = 30000; // 30-second timeout
     matchTimeout = setTimeout(() => {
         alert("Nenhum oponente encontrado dentro do tempo limite.");
         console.log("Timeout reached: No opponent found.");
         leaveGame(gameId);
     }, timeoutDuration);
 
-    // Tentamos obter update do jogo periodicamente
+    // Periodically check for game updates
     const interval = setInterval(async () => {
         try {
             const nick = localStorage.getItem("nick");
-            if (!nick) { 
+            if (!nick) {
                 clearInterval(interval);
                 return;
             }
-            const response = await fetch(serverURL + "/update", {
+            const response = await fetch(serverURL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ game: gameId, nick })
+                body: JSON.stringify({ type: "update", game: gameId, nick })
             });
             const data = await response.json();
 
-            // Verifica se o jogo já tem 2 jogadores
-            if (data.type === 'success' && data.status === 200) {
+            if (data.status === 200 && data.type === 'success') {
                 handleServerResponse(data);
-                // Se já temos 2 jogadores
+
+                // Check if the game has two players
                 if (data.players && data.players.length === 2) {
                     clearInterval(interval);
                     clearTimeout(matchTimeout);
 
-                    // "Game joined" após oponente entrar
                     console.log("Oponente encontrado, iniciando jogo...");
-                    // Supondo que agora podemos iniciar o jogo
-                    startGame({id:gameId, players:data.players, size:numSquares}, preferredColor, numSquares);
+                    startGame({ id: gameId, players: data.players, size: numSquares }, preferredColor, numSquares);
                 }
             } else {
                 handleServerResponse(data);
             }
-
         } catch (error) {
             console.error("Error checking for opponent:", error);
         }
-    }, 2000); // verifica a cada 2s se o oponente já entrou
+    }, 2000); // Check every 2 seconds
 }
 
 // Iniciar o jogo no cliente
@@ -164,7 +225,7 @@ function startGame(gameState, preferredColor, numSquares) {
 }
 
 // Sair do jogo
-window.leaveGame = async function(gameId) {
+window.leaveGame = async function (gameId) {
     const nick = localStorage.getItem("nick");
     const password = localStorage.getItem("password");
 
@@ -174,10 +235,10 @@ window.leaveGame = async function(gameId) {
     }
 
     try {
-        const response = await fetch(serverURL + "/leave", {
+        const response = await fetch(serverURL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nick, password, game: gameId })
+            body: JSON.stringify({ type: "leave", nick, password, game: gameId })
         });
         const data = await response.json();
         handleServerResponse(data);
@@ -192,8 +253,28 @@ window.leaveGame = async function(gameId) {
 };
 
 // Função para ações do jogador (caso seja necessário notificar movimentos)
-window.processPlayerAction = function(clickedCell, goalCell) {
-    // Aqui você pode implementar fetch para /notify ou /move se necessário
-    // Por enquanto mantemos vazio como no código original
-};
+window.processPlayerAction = async function (clickedCell, goalCell, gameId) {
+    const nick = localStorage.getItem("nick");
+    const password = localStorage.getItem("password");
 
+    if (!nick || !password || !gameId) {
+        console.warn("Cannot notify move without proper authentication or game ID.");
+        return;
+    }
+
+    try {
+        const response = await fetch(serverURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: "notify", nick, password, game: gameId, cell: { start: clickedCell, end: goalCell } })
+        });
+        const data = await response.json();
+        handleServerResponse(data);
+
+        if (data.status === 200 && data.type === 'success') {
+            console.log("Move notified successfully.");
+        }
+    } catch (error) {
+        console.error("Error in processPlayerAction:", error);
+    }
+};
