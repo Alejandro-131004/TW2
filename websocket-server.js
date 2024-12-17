@@ -7,6 +7,13 @@ const games = {};
 
 console.log(`HTTP server running on http://localhost:${PORT}/`);
 
+function setCORSHeaders(res) {
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins
+    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS'); // Allowed HTTP methods
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); // Allowed headers
+}
+
+
 function sendResponse(res, statusCode, status, type, message, additionalData = {}) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status, type, message, ...additionalData }));
@@ -32,6 +39,14 @@ function generateGameId(players, size) {
 
 // Handlers
 async function handleRequest(req, res) {
+    setCORSHeaders(res); // Set CORS headers for every response
+
+    if (req.method === 'OPTIONS') {
+        // Handle preflight requests
+        res.writeHead(204);
+        return res.end();
+    }
+
     if (req.method !== 'POST') {
         return sendResponse(res, 405, 'error', 'method_not_allowed', 'Only POST requests are allowed.');
     }
@@ -73,6 +88,7 @@ async function handleRequest(req, res) {
         }
     });
 }
+
 
 function handleRegister(res, { nick, password }) {
     if (!nick || !password) {
