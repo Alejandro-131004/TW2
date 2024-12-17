@@ -62,9 +62,9 @@ document.getElementById("game-mode").addEventListener("change", updateFirstPlaye
 document.addEventListener("DOMContentLoaded", updateFirstPlayerOptions);
 
 async function authenticateUser(event) {
-    event.preventDefault(); // Prevents actual form submission
+    event.preventDefault(); // Impede o envio do formulário
 
-    // Get the form values
+    // Obtém os valores do formulário
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value.trim();
 
@@ -74,23 +74,23 @@ async function authenticateUser(event) {
     }
 
     try {
-        // Attempt to register/login the user
-        const success = await window.register(username, password); // Assumes `window.register` returns true/false
+        // Tenta registrar ou autenticar o usuário
+        const success = await window.register(username, password); // A função agora faz tanto login quanto registro
 
         if (!success) {
             alert("Erro na autenticação: Usuário ou senha inválidos.");
             return;
         }
 
-        // Successful authentication
+        // Autenticação bem-sucedida
         alert("Autenticação realizada com sucesso!");
         document.getElementById('identification').style.display = 'none';
         document.getElementById('config-area').style.display = 'block';
 
-        // Update status message
+        // Atualiza a mensagem de status
         document.getElementById('status').textContent = "Configurações de Jogo";
 
-        // Save credentials locally for later use
+        // Salva as credenciais localmente para uso posterior
         localStorage.setItem('nick', username);
         localStorage.setItem('password', password);
     } catch (error) {
@@ -98,6 +98,7 @@ async function authenticateUser(event) {
         alert("Ocorreu um erro ao tentar autenticar. Tente novamente.");
     }
 }
+
 
 
 // Updated initializeGame function

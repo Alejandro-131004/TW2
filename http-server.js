@@ -37,7 +37,7 @@ function sendResponse(res, statusCode, status, type, message, additionalData = {
         'Access-Control-Allow-Methods': 'POST',
         'Access-Control-Allow-Headers': 'Content-Type'
     });
-    res.end(JSON.stringify({ status, type, message, ...additionalData }));
+    res.end(JSON.stringify({ statusCode,status, type, message, ...additionalData }));
 }
 
 // Utility functions

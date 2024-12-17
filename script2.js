@@ -13,9 +13,9 @@ let matchTimeout = null;
 
 // Função para interpretar a resposta do servidor após fetch
 function handleServerResponse(data) {
-    const { type, status, message } = data;
+    const { type,statusCode, status, message } = data;
 
-    if (!type || status === undefined) {
+    if (!type || statusCode === undefined) {
         console.error("Invalid server response format:", data);
         alert("Erro: resposta inválida do servidor.");
         return false; // Explicitly return false for invalid responses
@@ -24,7 +24,7 @@ function handleServerResponse(data) {
     switch (type) {
         case "register":
             // Registration/Login Responses
-            if (status === 200) {
+            if (statusCode == 200) {       
                 if (message === "Registration successful.") {
                     console.log("Register/Login successful:", message);
                     return true; // Indicate success
@@ -32,11 +32,11 @@ function handleServerResponse(data) {
                     console.log("User already registered:", message);
                     return true; // Indicate success
                 }
-            } else if (status === 401) {
+            } else if (statusCode === 401) {
                 console.error("Register/Login failed (401):", message);
                 alert(`Authentication failed: ${message}`);
                 return false; // Indicate failure
-            } else if (status === 400) {
+            } else if (statusCode === 400) {
                 console.error("Register/Login failed (400):", message);
                 alert(`Bad request: ${message}`);
                 return false; // Indicate failure
@@ -45,55 +45,55 @@ function handleServerResponse(data) {
 
         case "join":
             // Responses for joining a game
-            if (status === 200) {
+            if (statusCode === 200) {
                 console.log("Matchmaking started successfully:", message);
                 return true;
             } else {
-                console.error(`Failed to join game (${status}):`, message);
+                console.error(`Failed to join game (${statusCode}):`, message);
                 alert(`Failed to join game: ${message}`);
                 return false;
             }
 
         case "update":
             // Responses for game state updates
-            if (status === 200) {
+            if (statusCode === 200) {
                 console.log("Game update received:", message || "Update successful.");
                 return true;
             } else {
-                console.error(`Game update failed (${status}):`, message);
+                console.error(`Game update failed (${statusCode}):`, message);
                 alert(`Failed to update game state: ${message}`);
                 return false;
             }
             
         case "ranking":
-            if (status === 200) {
+            if (statusCode === 200) {
                 console.log("Ranking carregado com sucesso:", message);
                 updateRankingTable(message);
                 return true;
             } else {
-                console.error(`Falha ao carregar ranking (${status}):`, message);
+                console.error(`Falha ao carregar ranking (${statusCode}):`, message);
                 alert(`Erro ao carregar ranking: ${message}`);
                 return false;
             }
 
         case "leave":
             // Responses for leaving a game
-            if (status === 200) {
+            if (statusCode === 200) {
                 console.log("Left the game successfully:", message || "Leave successful.");
                 return true;
             } else {
-                console.error(`Failed to leave game (${status}):`, message);
+                console.error(`Failed to leave game (${statusCode}):`, message);
                 alert(`Failed to leave game: ${message}`);
                 return false;
             }
 
         case "notify":
             // Responses for player action notifications
-            if (status === 200) {
+            if (statusCode === 200) {
                 console.log("Player action notified successfully:", message);
                 return true;
             } else {
-                console.error(`Failed to notify player action (${status}):`, message);
+                console.error(`Failed to notify player action (${statusCode}):`, message);
                 alert(`Failed to notify action: ${message}`);
                 return false;
             }
@@ -214,7 +214,7 @@ window.initiateMatchmaking = async function (firstPlayer, numSquares) {
         });
         const data = await response.json();
 
-        if (data.status === 200 && data.type === 'success') {
+        if (data.statusCode === 200 && data.type === 'success') {
             handleServerResponse(data);
 
             if (data.message === 'Waiting for an opponent') {
@@ -260,7 +260,7 @@ function checkForOpponent(gameId, preferredColor, numSquares) {
             });
             const data = await response.json();
 
-            if (data.status === 200 && data.type === 'success') {
+            if (data.statusCode === 200 && data.type === 'success') {
                 handleServerResponse(data);
 
                 // Check if the game has two players
@@ -310,7 +310,7 @@ window.leaveGame = async function (gameId) {
         const data = await response.json();
         handleServerResponse(data);
 
-        if (data.status === 200 && data.type === 'success') {
+        if (data.statusCode === 200 && data.type === 'success') {
             currentMatch2 = null;
             console.log("Left the game.");
         }
@@ -338,7 +338,7 @@ window.processPlayerAction = async function (clickedCell, goalCell, gameId) {
         const data = await response.json();
         handleServerResponse(data);
 
-        if (data.status === 200 && data.type === 'success') {
+        if (data.statusCode === 200 && data.type === 'success') {
             console.log("Move notified successfully.");
         }
     } catch (error) {
