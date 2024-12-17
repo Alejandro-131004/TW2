@@ -146,6 +146,7 @@ function fetchRanking(size) {
     fetch(`${serverURL}/ranking?size=${size}`)
         .then(response => response.json())
         .then(data => {
+            console.log("Ranking response data:", data);
             if (data.error) {
                 console.error("Erro ao buscar ranking:", data.error);
                 alert(`Erro ao buscar ranking: ${data.error}`);

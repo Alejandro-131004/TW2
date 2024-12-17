@@ -93,7 +93,21 @@ async function handleRequest(req, res) {
         return res.end();
     }
 
-    
+    if (req.method === 'GET' && req.url.startsWith('/leaderboard')) {
+        // Extract query parameters from the URL
+        const urlParams = new URL(`http://localhost${req.url}`);
+        const size = parseInt(urlParams.searchParams.get('size')) || 10; // Default to 10 if no size is provided
+        if (isNaN(size)) {
+            return sendResponse(res, 400, 'error', 'invalid_size', 'Invalid size parameter.');
+        }
+
+        handleLeaderboard(res, { size });
+        return; // Prevent further processing for non-POST requests
+    }
+
+    if (req.method !== 'POST') {
+        return sendResponse(res, 405, 'error', 'method_not_allowed', 'Only POST requests are allowed.');
+    }
 
     let body = '';
     req.on('data', chunk => {
@@ -124,9 +138,6 @@ async function handleRequest(req, res) {
                 case 'move':
                     handleMove(res, request);
                     break;
-                case 'leaderboard': // Novo caso para a leaderboard
-                    handleLeaderboard(res, request);
-                    break;
                 default:
                     sendResponse(res, 404, 'error', 'unknown_request', 'Unknown request type.');
             }
@@ -135,6 +146,7 @@ async function handleRequest(req, res) {
         }
     });
 }
+
 
 
 function handleRegister(res, { nick, password }) {
