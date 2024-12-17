@@ -59,18 +59,41 @@ function generateGameId(players, size) {
 }
 
 // Handlers
+function handleLeaderboard(res, { size }) {
+    // Carrega os usuários do arquivo
+    const users = loadUsers();
+
+    // Cria um array com as estatísticas dos jogadores
+    const players = Object.keys(users).map(nick => {
+        const stats = users[nick].scores && users[nick].scores[size] 
+            ? users[nick].scores[size] 
+            : { wins: 0, losses: 0, gamesPlayed: 0 };
+        
+        return {
+            name: nick,
+            wins: stats.wins,
+            losses: stats.losses,
+            gamesPlayed: stats.gamesPlayed
+        };
+    });
+
+    // Ordena os jogadores com base no número de vitórias
+    players.sort((a, b) => b.wins - a.wins);
+
+    // Envia a resposta ao cliente com o ranking
+    sendResponse(res, 200, 'success', 'leaderboard', 'Leaderboard fetched successfully.', { players });
+}
+
+// Adiciona o case 'leaderboard' no switch principal
 async function handleRequest(req, res) {
     setCORSHeaders(res); // Set CORS headers for every response
 
     if (req.method === 'OPTIONS') {
-        // Handle preflight requests
         res.writeHead(204);
         return res.end();
     }
 
-    if (req.method !== 'POST') {
-        return sendResponse(res, 405, 'error', 'method_not_allowed', 'Only POST requests are allowed.');
-    }
+    
 
     let body = '';
     req.on('data', chunk => {
@@ -101,6 +124,9 @@ async function handleRequest(req, res) {
                 case 'move':
                     handleMove(res, request);
                     break;
+                case 'leaderboard': // Novo caso para a leaderboard
+                    handleLeaderboard(res, request);
+                    break;
                 default:
                     sendResponse(res, 404, 'error', 'unknown_request', 'Unknown request type.');
             }
@@ -110,27 +136,50 @@ async function handleRequest(req, res) {
     });
 }
 
+
 function handleRegister(res, { nick, password }) {
+    // Validate input
     if (!nick || !password) {
         return sendResponse(res, 400, 'error', 'register', 'Nickname and password are required.');
     }
 
+    // Load existing users
     const users = loadUsers();
 
+    // Check if the user exists
     if (users[nick]) {
+        // Validate password for existing user
         if (!validatePassword(password, users[nick].hash, users[nick].salt)) {
-            return sendResponse(res, 401, 'error', 'register', 'Nickname is already taken with a different password.');
-        } else {
-            return sendResponse(res, 200, 'success', 'register', 'User already registered.');
+            return sendResponse(res, 401, 'error', 'register', 'Incorrect password for this nickname.');
         }
+        // User exists and password matches
+        return sendResponse(res, 200, 'success', 'register', 'User loaded successfully.');
     }
 
+    // If user does not exist, register a new user
     const { salt, hash } = encryptPassword(password);
-    users[nick] = { salt, hash };
+
+    // Initialize default scores for new users only
+    const defaultScores = {
+        "9": { "wins": 0, "losses": 0, "gamesPlayed": 0 },
+        "8": { "wins": 0, "losses": 0, "gamesPlayed": 0 },
+        "7": { "wins": 0, "losses": 0, "gamesPlayed": 0 },
+        "6": { "wins": 0, "losses": 0, "gamesPlayed": 0 },
+        "5": { "wins": 0, "losses": 0, "gamesPlayed": 0 },
+        "4": { "wins": 0, "losses": 0, "gamesPlayed": 0 },
+        "3": { "wins": 0, "losses": 0, "gamesPlayed": 0 },
+        "2": { "wins": 0, "losses": 0, "gamesPlayed": 0 }
+    };
+
+    // Create and save the new user with scores
+    users[nick] = { salt, hash, scores: defaultScores };
     saveUsers(users);
-    console.log(`User registered: ${nick}`);
+
+    console.log(`New user registered: ${nick}`);
     return sendResponse(res, 200, 'success', 'register', 'Registration successful.');
 }
+
+
 
 function handleJoin(res, { nick, password, size }) {
     if (!nick || !password || !size) {

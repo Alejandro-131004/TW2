@@ -30,6 +30,14 @@
         </form>
     </div>
     
+    <div id="config-area" style="display: none; margin: 20px 0;">
+        <h2>Configurações de Jogo</h2>
+        <!-- Adicione o conteúdo para as configurações do jogo aqui -->
+    </div>
+    
+    <p id="status">Aguardando autenticação...</p>
+    
+    
     <button id="quit-game" class="config-button" style="display: none;" onclick="quitGame()">Desistir do Jogo</button>
     
     <div id="config-area" style="display: none;">
@@ -72,31 +80,61 @@
         <button id="view-scores" onclick="toggleScoresPanel()">🏆</button>
     </div>
     
-    <!-- Área para exibir as classificações -->
     <div id="scores-panel" style="display: none; position: absolute; top: 50px; right: 10px; background: white; padding: 10px; border: 1px solid black; z-index: 100;">
         <!-- Botão de fechar -->
         <button onclick="toggleScoresPanel()" style="position: absolute; top: 5px; right: 5px; background: transparent; border: none; font-size: 20px; cursor: pointer;">&times;</button>
-        
         <h2>Classificações</h2>
     
-        <!-- Botões de tamanho de tabuleiro (squares) -->
-        <div id="squares-buttons">
-            <button onclick="showDifficultyButtons(2)">2 quadrados</button>
-            <button onclick="showDifficultyButtons(3)">3 quadrados</button>
-            <button onclick="showDifficultyButtons(4)">4 quadrados</button>
-            <button onclick="showDifficultyButtons(5)">5 quadrados</button>
-            <button onclick="showDifficultyButtons(6)">6 quadrados</button>
-            <button onclick="showDifficultyButtons(7)">7 quadrados</button>
-            <button onclick="showDifficultyButtons(8)">8 quadrados</button>
-            <button onclick="showDifficultyButtons(9)">9 quadrados</button>
+        <!-- Botões principais -->
+        <div>
+            <button onclick="selectMode('offline')">Offline (AI)</button>
+            <button onclick="selectMode('multiplayer')">Multiplayer</button>
         </div>
     
-        <!-- Botões de dificuldade, exibidos quando um tamanho é selecionado -->
+        <!-- Botões para escolher tamanho do tabuleiro -->
+        <div id="board-size-buttons" style="display: none; margin-top: 10px;"></div>
+    
+        <!-- Botões de dificuldade (Offline) -->
         <div id="difficulty-buttons" style="display: none; margin-top: 10px;"></div>
     
-        <!-- Tabela de classificações, exibida quando uma dificuldade é selecionada -->
-        <div id="classification-table" style="display: none; margin-top: 10px;"></div>
+        <!-- Tabela de classificações Offline -->
+        <div id="offline-classification-table" style="display: none; margin-top: 10px;">
+            <h3>Classificações Offline (AI)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Minhas Vitórias</th>
+                        <th>Vitórias do Computador</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td id="offline-my-wins">0</td>
+                        <td id="offline-computer-wins">0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    
+        <!-- Tabela de classificações Multiplayer -->
+        <div id="multiplayer-classification-table" style="display: none; margin-top: 10px;">
+            <h3>Classificações Multiplayer</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Posição</th>
+                        <th>Nome</th>
+                        <th>Vitórias</th>
+                        <th>Perdas</th>
+                        <th>Jogos</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </div>
+    
+    
     
     <!-- Modal para as Instruções com Tópicos -->
     <div id="instructionsModal" class="modal" style="display: none;">

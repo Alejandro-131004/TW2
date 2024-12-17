@@ -12,27 +12,25 @@ let currentMatch2 = null;
 let matchTimeout = null;
 
 // Função para interpretar a resposta do servidor após fetch
-// Função para interpretar a resposta do servidor após fetch
 function handleServerResponse(data) {
     const { type, status, message } = data;
 
     if (!type || status === undefined) {
         console.error("Invalid server response format:", data);
-        return;
+        alert("Erro: resposta inválida do servidor.");
+        return false; // Explicitly return false for invalid responses
     }
 
     switch (type) {
         case "register":
-            // Responses for registration/login
-            case "register":
             // Registration/Login Responses
             if (status === 200) {
                 if (message === "Registration successful.") {
                     console.log("Register/Login successful:", message);
                     return true; // Indicate success
                 } else if (message === "User already registered.") {
-                    console.log("This user is already registered with the same password:", message);
-                    return true; // Still considered successful
+                    console.log("User already registered:", message);
+                    return true; // Indicate success
                 }
             } else if (status === 401) {
                 console.error("Register/Login failed (401):", message);
@@ -49,57 +47,80 @@ function handleServerResponse(data) {
             // Responses for joining a game
             if (status === 200) {
                 console.log("Matchmaking started successfully:", message);
+                return true;
             } else {
                 console.error(`Failed to join game (${status}):`, message);
+                alert(`Failed to join game: ${message}`);
+                return false;
             }
-            break;
 
         case "update":
             // Responses for game state updates
             if (status === 200) {
                 console.log("Game update received:", message || "Update successful.");
+                return true;
             } else {
                 console.error(`Game update failed (${status}):`, message);
+                alert(`Failed to update game state: ${message}`);
+                return false;
             }
-            break;
+            
+        case "ranking":
+            if (status === 200) {
+                console.log("Ranking carregado com sucesso:", message);
+                updateRankingTable(message);
+                return true;
+            } else {
+                console.error(`Falha ao carregar ranking (${status}):`, message);
+                alert(`Erro ao carregar ranking: ${message}`);
+                return false;
+            }
 
         case "leave":
             // Responses for leaving a game
             if (status === 200) {
                 console.log("Left the game successfully:", message || "Leave successful.");
+                return true;
             } else {
                 console.error(`Failed to leave game (${status}):`, message);
+                alert(`Failed to leave game: ${message}`);
+                return false;
             }
-            break;
 
         case "notify":
             // Responses for player action notifications
             if (status === 200) {
                 console.log("Player action notified successfully:", message);
+                return true;
             } else {
                 console.error(`Failed to notify player action (${status}):`, message);
+                alert(`Failed to notify action: ${message}`);
+                return false;
             }
-            break;
 
         case "success":
             // General success responses
             console.log("Success:", message);
-            break;
+            return true;
 
         case "error":
             // General error responses
             console.error("Error:", message);
-            break;
+            alert(`Error: ${message}`);
+            return false;
 
         default:
             // Unknown response type
             console.error("Unknown response type:", type, message || "No message provided.");
-            break;
+            alert(`Unknown response type: ${type}`);
+            return false;
     }
+
+    return false; // Default to failure if no condition is met
 }
 
 
-// Função para registrar/login
+// Function for registering or logging in
 window.register = async function(nick, password) {
     try {
         const response = await fetch(serverURL, {
@@ -107,13 +128,58 @@ window.register = async function(nick, password) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: "register", nick, password })
         });
+
         const data = await response.json();
-        handleServerResponse(data);
+
+        // Handle server response and return success/failure status
+        const isSuccess = handleServerResponse(data);
+
+        // Return whether the registration/login was successful
+        return isSuccess;
     } catch (error) {
         console.error("Error in register:", error);
+        return false; // In case of error, return false to indicate failure
     }
 };
 
+function fetchRanking(size) {
+    fetch(`${serverURL}/ranking?size=${size}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error("Erro ao buscar ranking:", data.error);
+                alert(`Erro ao buscar ranking: ${data.error}`);
+            } else {
+                console.log("Ranking recebido com sucesso:", data);
+                updateRankingTable(data.ranking);
+            }
+        })
+        .catch(error => {
+            console.error("Erro de rede ao buscar ranking:", error);
+            alert("Erro de rede ao buscar ranking. Verifique sua conexão.");
+        });
+}
+
+// Função para atualizar a tabela com os dados do ranking
+function updateRankingTable(rankingData) {
+    const multiplayerTable = document.getElementById('multiplayer-classification-table');
+    const tbody = multiplayerTable.querySelector('tbody');
+    tbody.innerHTML = ''; // Limpa qualquer conteúdo anterior
+
+    rankingData.forEach((player, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${player.name}</td>
+            <td>${player.wins}</td>
+            <td>${player.losses}</td>
+            <td>${player.gamesPlayed}</td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    multiplayerTable.style.display = 'block'; // Mostra a tabela
+}
 // Função para iniciar/joinar em um jogo
 window.joinGame = async function(nick, password, size) {
     try {

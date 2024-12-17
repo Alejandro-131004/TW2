@@ -62,36 +62,35 @@ document.getElementById("game-mode").addEventListener("change", updateFirstPlaye
 document.addEventListener("DOMContentLoaded", updateFirstPlayerOptions);
 
 async function authenticateUser(event) {
-    event.preventDefault(); // Impede o envio real do formulário
+    event.preventDefault(); // Prevents actual form submission
 
-    // Obtém os valores do formulário
-    let username = document.getElementById('username').value.trim();
-    let password = document.getElementById('password').value.trim();
-    console.log(username)
+    // Get the form values
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value.trim();
+
     if (!username || !password) {
         alert("Por favor, preencha todos os campos.");
         return;
     }
 
     try {
-        // Realiza o registro no servidor
-        const response = await window.register(username, password);
+        // Attempt to register/login the user
+        const success = await window.register(username, password); // Assumes `window.register` returns true/false
 
-        if (response && response.error) {
-            // Mostra o erro retornado pelo servidor
-            alert(`Erro ao autenticar: ${response.error}`);
+        if (!success) {
+            alert("Erro na autenticação: Usuário ou senha inválidos.");
             return;
         }
 
-        // Sucesso: Oculta a área de identificação e exibe as configurações de jogo
+        // Successful authentication
         alert("Autenticação realizada com sucesso!");
         document.getElementById('identification').style.display = 'none';
         document.getElementById('config-area').style.display = 'block';
 
-        // Atualiza o status para "Configurações de Jogo"
+        // Update status message
         document.getElementById('status').textContent = "Configurações de Jogo";
 
-        // Salva o nome do jogador para uso posterior
+        // Save credentials locally for later use
         localStorage.setItem('nick', username);
         localStorage.setItem('password', password);
     } catch (error) {
@@ -99,6 +98,7 @@ async function authenticateUser(event) {
         alert("Ocorreu um erro ao tentar autenticar. Tente novamente.");
     }
 }
+
 
 // Updated initializeGame function
 function initializeGame() {
@@ -975,92 +975,101 @@ function incrementWins(winner) {
     
 }
 
-
-
-
 function toggleScoresPanel() {
-    const scoresPanel = document.getElementById("scores-panel");
-    scoresPanel.style.display = scoresPanel.style.display === "none" ? "block" : "none";
-    
-    // Resetar o conteúdo dos botões de dificuldade e da tabela ao abrir
+    const panel = document.getElementById("scores-panel");
+    panel.style.display = panel.style.display === "none" ? "block" : "none";
+    resetUI();
+}
+
+function resetUI() {
+    document.getElementById("board-size-buttons").style.display = "none";
     document.getElementById("difficulty-buttons").style.display = "none";
-    document.getElementById("classification-table").style.display = "none";
+    document.getElementById("offline-classification-table").style.display = "none";
+    document.getElementById("multiplayer-classification-table").style.display = "none";
 }
 
+function selectMode(mode) {
+    resetUI();
+    showBoardSizeButtons(mode);
+}
 
-function showDifficultyButtons(squares) {
-    const difficultyButtons = document.getElementById("difficulty-buttons");
-    difficultyButtons.style.display = "block"; // Exibe o container dos botões
-    difficultyButtons.innerHTML = ""; // Limpa botões anteriores
+function showBoardSizeButtons(mode) {
+    const container = document.getElementById("board-size-buttons");
+    container.style.display = "block";
+    container.innerHTML = ""; // Clear old buttons
 
-    // Remove a classe 'selected' dos botões de número de quadrados
-    Array.from(document.getElementById("squares-buttons").children).forEach(btn => btn.classList.remove("selected"));
-    
-    // Adiciona a classe 'selected' ao botão de número de quadrados selecionado
-    const squareButton = document.querySelector(`#squares-buttons button:nth-child(${squares - 1})`);
-    if (squareButton) squareButton.classList.add("selected");
-
-    // Cria os botões de dificuldade
-    const difficulties = ["easy", "medium", "hard"];
-    difficulties.forEach(difficulty => {
+    for (let size = 2; size <= 9; size++) {
         const button = document.createElement("button");
-        button.textContent = `Dificuldade: ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}`;
-
+        button.textContent = `${size} Quadrados`;
         button.onclick = () => {
-            showClassificationTable(squares, difficulty);
-
-            // Remove a classe 'selected' dos outros botões de dificuldade
-            Array.from(difficultyButtons.children).forEach(btn => btn.classList.remove("selected"));
-
-            // Adiciona a classe 'selected' ao botão de dificuldade clicado
-            button.classList.add("selected");
+            if (mode === "offline") showDifficultyButtons(size);
+            else loadMultiplayerLeaderboard(size);
         };
+        container.appendChild(button);
+    }
+}
 
-        difficultyButtons.appendChild(button);
+function showDifficultyButtons(size) {
+    const container = document.getElementById("difficulty-buttons");
+    container.style.display = "block";
+    container.innerHTML = ""; // Clear old buttons
+
+    ["easy", "medium", "hard"].forEach(difficulty => {
+        const button = document.createElement("button");
+        button.textContent = `Dificuldade: ${difficulty}`;
+        button.onclick = () => showOfflineClassificationTable(size, difficulty);
+        container.appendChild(button);
     });
 }
 
-function showClassificationTable(squares, difficulty) {
-    const classificationTable = document.getElementById("classification-table");
-    classificationTable.style.display = "block"; // Exibe a tabela
+function showOfflineClassificationTable(size, difficulty) {
+    document.getElementById("offline-classification-table").style.display = "block";
+    document.getElementById("offline-my-wins").textContent = wins.me[size][difficulty];
+    document.getElementById("offline-computer-wins").textContent = wins.computer[size][difficulty];
+}
 
-    // Limpa o conteúdo anterior da tabela
-    classificationTable.innerHTML = "";
+function loadMultiplayerLeaderboard(size) {
+    fetch(`${serverURL}/leaderboard?size=${size}`)
+        .then(response => response.json())
+        .then(data => {
+            // Valida a resposta e verifica erros
+            if (data.error) {
+                console.error("Erro ao buscar leaderboard:", data.error);
+                alert(`Erro ao buscar leaderboard: ${data.error}`);
+                return;
+            }
 
-    // Adiciona o título da tabela
-    const title = document.createElement("h3");
-    title.textContent = `Classificações para ${squares} quadrados - Dificuldade: ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}`;
-    classificationTable.appendChild(title);
+            // Exibir a tabela de classificação no HTML
+            updateLeaderboardTable(data.players);
+        })
+        .catch(err => {
+            console.error("Falha ao carregar a leaderboard:", err);
+            alert("Erro de rede ao carregar leaderboard. Verifique sua conexão.");
+        });
+}
 
-    // Cria a tabela com cabeçalhos
-    const table = document.createElement("table");
-    const headerRow = document.createElement("tr");
-    ["Minhas Vitórias", "Vitórias do Computador"].forEach(header => {
-        const headerCell = document.createElement("th");
-        headerCell.textContent = header;
-        headerRow.appendChild(headerCell);
+// Função para atualizar a tabela HTML com os dados do leaderboard
+function updateLeaderboardTable(players) {
+    const table = document.getElementById("multiplayer-classification-table");
+    table.style.display = "block"; // Mostra a tabela
+
+    const tbody = table.querySelector("tbody");
+    tbody.innerHTML = ""; // Limpa os dados anteriores da tabela
+
+    players.forEach((player, index) => {
+        const row = `<tr>
+            <td>${index + 1}</td>
+            <td>${player.name}</td>
+            <td>${player.wins}</td>
+            <td>${player.losses}</td>
+            <td>${player.gamesPlayed}</td>
+        </tr>`;
+        tbody.insertAdjacentHTML("beforeend", row); // Insere cada linha no tbody
     });
-    table.appendChild(headerRow);
-
-    // Linha de dados com as vitórias
-    const dataRow = document.createElement("tr");
-
-    // Minhas vitórias
-    const myWinsCell = document.createElement("td");
-    myWinsCell.textContent = wins.me[squares][difficulty];
-    dataRow.appendChild(myWinsCell);
-
-    // Vitórias do computador
-    const computerWinsCell = document.createElement("td");
-    computerWinsCell.textContent = wins.computer[squares][difficulty];
-    dataRow.appendChild(computerWinsCell);
-
-    table.appendChild(dataRow);
-    classificationTable.appendChild(table);
 }
 
 
-
+// Example wins object
 let wins = {
     me: {
         2: { easy: 0, medium: 0, hard: 0 },
@@ -1083,6 +1092,9 @@ let wins = {
         9: { easy: 0, medium: 0, hard: 0 }
     }
 };
+
+
+
 
 function startGameTwoPlayers(firstPlayer) {
     currentPlayer = firstPlayer; // Define o jogador inicial com base na seleção
